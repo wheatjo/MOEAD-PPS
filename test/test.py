@@ -6,7 +6,7 @@ from functools import partial
 from pymoo.factory import get_problem
 from pymoo.factory import get_mutation
 from pymoo.interface import mutation
-from utils.uniform_vector import Mean_vector
+# from utils.uniform_vector import Mean_vector
 
 BOUND_LOW = 0.0
 BOUND_UP = 1.0
@@ -16,7 +16,9 @@ def generate_cho(N_dec=10):
     cho = np.random.random(N_dec)
     return cho
 
-creator.create('MultiFitness', base.Fitness, weights=(-1.0, -1.0, -1.0))
+a = (-1,-1,-1)
+# creator.create('MultiFitness', base.Fitness, weights=(-1.0, -1.0, -1.0))
+creator.create('MultiFitness', base.Fitness, weights=a)
 creator.create("Individual", np.ndarray, fitness=creator.MultiFitness, cv=float)
 
 toolbox = base.Toolbox()

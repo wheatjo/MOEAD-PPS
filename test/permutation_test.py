@@ -1,6 +1,6 @@
 from itertools import combinations
 import numpy as np
-
+from sklearn.metrics.pairwise import euclidean_distances
 
 def uniform_vector_nbi(N, M):
     H1 = 1
@@ -34,6 +34,12 @@ def uniform_vector_nbi(N, M):
     return W
 
 
+def get_neighbour_vector(w_lambda, T):
+    w_euclidean_distance = euclidean_distances(w_lambda, w_lambda)
+    sort_ind = np.argsort(w_euclidean_distance, axis=0)
+    # print("sort: ", sort_ind)
+    neighbours_vec = sort_ind[:, 0:T]
+    return neighbours_vec
 
 def display_w(W):
 
@@ -54,8 +60,10 @@ def display_w(W):
 def main():
     # needn't consider the relationship of population(N) and number of lambda vector
     # the vector will divide for every individual
-    w = uniform_vector_NBI(70, 3)
+    w = uniform_vector_nbi(70, 3)
     print(w.shape)
+    neighour_vec = get_neighbour_vector(w, 4)
+    print("neig", neighour_vec)
     display_w(w)
 
 

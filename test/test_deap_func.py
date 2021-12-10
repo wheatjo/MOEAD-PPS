@@ -4,6 +4,7 @@ from deap import base
 from deap import tools
 from deap import creator
 import numpy as np
+from deap import tools
 
 random.seed(42)
 

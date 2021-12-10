@@ -54,9 +54,9 @@ def display_w(W):
 def main():
     # needn't consider the relationship of population(N) and number of lambda vector
     # the vector will divide for every individual
-    w = uniform_vector_NBI(70, 3)
+    w = uniform_vector_nbi(70, 3)
     print(w.shape)
-    display_w(w)
+    # display_w(w)
 
 
 if __name__ == '__main__':
