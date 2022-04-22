@@ -5,7 +5,7 @@ from deap import tools
 from deap import creator
 import numpy as np
 import math
-from utils.uniform_vector import uniform_vector_nbi
+
 from sklearn.metrics.pairwise import euclidean_distances
 from pymoo.core.problem import ElementwiseProblem
 import copy
@@ -16,9 +16,11 @@ from pymoo.interface import mutation
 from pymoo.factory import get_mutation
 from pymoo.visualization.scatter import Scatter
 import logging
-from pymoo.core.problem import calc_pf
-from problem.LIRCMOP.lircmop1 import LIRCMOP1
-from utils.utils import save_data
+# from pymoo.core.problem import calc_pf
+
+# from utils.savedata import save_data
+# from pymoo.algorithms.soo.nonconvex.de import DE
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -89,14 +91,14 @@ class MoeadPPS(object):
         self.epsilon_k = 0
         self.epsilon_0 = 0
         self.alpha = 0.95
-        self.tao = 0.05
+        self.tao = 0.1
         self.cp = 2
         self.T = math.ceil(N/problem.n_var) # the number of neighbour vector
         # self.w_lambda_vector = uniform_vector_nbi(self.N, problem.n_obj)
-        self.w_lambda_vector = get_reference_directions("das-dennis", self.n_objs, n_partitions=self.N)[0:self.N]
+        self.w_lambda_vector = get_reference_directions("das-dennis", self.n_objs, n_points=self.N)# [0:self.N]
         self.neighbour_w_ind = self.get_neighbour_vector(self.w_lambda_vector)
-        self.ideal_point = np.zeros((2, problem.n_obj))# store kth gen ideal point and k-1th ideal point
-        self.nadir_point = np.zeros((2, problem.n_obj))# store kth gen nadir point and k-1th nadir point
+        self.ideal_point = np.zeros((self.last_gen, problem.n_obj))# store kth gen ideal point and k-1th ideal point
+        self.nadir_point = np.zeros((self.last_gen, problem.n_obj))# store kth gen nadir point and k-1th nadir point
         self.pop = self.create_pop(self, N, problem.n_var, problem.n_obj, self.n_cv)
         self.crossover = tools.cxUniform
         self.mutation = tools.mutPolynomialBounded
@@ -107,6 +109,7 @@ class MoeadPPS(object):
         self.non_dominate_sort = NonDominatedSorting()
         self.calculate_crowdig_distance = calc_crowding_distance
         self.problem_pf = self.problem.pareto_front()
+        self.mutation_func = get_mutation("real_pm", eta=self.mutation_eta, prob=1.0 / self.n_var)
 
     def get_neighbour_vector(self, w_lambda):
         w_euclidean_distance = euclidean_distances(w_lambda, w_lambda)
@@ -124,12 +127,17 @@ class MoeadPPS(object):
         return pop
 
     def differential_evolution_operator(self, parents: list):
-        offspring_chromosome = parents[0] + 0.5 * (parents[1] - parents[2])
+        CR = 0.5
+        offspring_chromosome = parents[0]
+        rand_site = np.random.random((1, self.n_var))>CR
+        offspring_chromosome_rep = parents[0] + 0.5 * (parents[1] - parents[2])
+        offspring_chromosome = np.where(np.logical_and(offspring_chromosome, rand_site), offspring_chromosome_rep, offspring_chromosome)
+        # offspring_chromosome = parents[0] + 0.5 * (parents[1] - parents[2])
         test_off = offspring_chromosome
         # offspring_chromosome = self.mutation(offspring_chromosome, eta=self.mutation_eta,
         #                                      low=self.var_low_bound, up=self.var_up_bound, indpb=1.0 / self.n_var)
 
-        offspring_chromosome = mutation(get_mutation("real_pm", eta=self.mutation_eta, prob=1.0 / self.n_var), np.array([offspring_chromosome]))
+        offspring_chromosome = mutation(self.mutation_func, np.array(offspring_chromosome))
         offspring = Individual(offspring_chromosome[0], self.n_var, self.n_cv)
         if offspring.shape != (self.n_var, ):
             raise Exception("offspring illegal!", offspring, test_off)
@@ -190,28 +198,46 @@ class MoeadPPS(object):
         pop_obj_cv_mat = np.hstack((decs_matrix, objs_matrix, cv_matrix))
         return pop_obj_cv_mat
 
-    def update_ideal_point(self):
+    def update_ideal_point(self, gen):
+        X = self.get_fitness_matrix()
         now_ideal_point = np.min(self.get_fitness_matrix(), axis=0)
-        self.ideal_point[0] = self.ideal_point[1]
-        self.ideal_point[1] = now_ideal_point
-        logger.debug(f"now ideal_point: {self.ideal_point[1]}")
+        if gen > self.last_gen-1:
+            temp = list(self.ideal_point)
+            temp.pop(0)
+            temp.append(now_ideal_point)
+            self.ideal_point = np.array(temp)
+        else:
+            self.ideal_point[gen] = now_ideal_point
+        logger.debug(f"ideal_point: {self.ideal_point}")
+        # self.ideal_point[0] = self.ideal_point[1]
+        # self.ideal_point[1] = now_ideal_point
+        # logger.debug(f"now ideal_point: {self.ideal_point[1]}")
 
-    def update_nadir_point(self):
+    def update_nadir_point(self, gen):
         now_nadir_point = np.max(self.get_fitness_matrix(), axis=0)
-        self.nadir_point[0] = self.nadir_point[1]
-        self.nadir_point[1] = now_nadir_point
-        logger.debug(f"now nadir_point: {self.nadir_point[1]}")
+        if gen > self.last_gen-1:
+            temp = list(self.nadir_point)
+            temp.pop(0)
+            temp.append(now_nadir_point)
+            self.nadir_point = np.array(temp)
+        else:
+            self.nadir_point[gen] = now_nadir_point
+        # self.nadir_point[0] = self.nadir_point[1]
+        # self.nadir_point[1] = now_nadir_point
+        # logger.debug(f"now nadir_point: {self.nadir_point[1]}")
+        logger.debug(f"nadir_point: {self.nadir_point}")
 
     def calc_max_change(self):
         delta_value = 1e-6 * np.ones(self.n_objs)
         abs_ideal_point_k_1 = np.abs(self.ideal_point[0])
         abs_nadir_point_k_1 = np.abs(self.nadir_point[0])
         # delta_value = 1e-6
-        rz = np.max(np.abs(self.ideal_point[1] - self.ideal_point[0]) / np.where(abs_ideal_point_k_1 > delta_value,
+        rz = np.max(np.abs(self.ideal_point[-1] - self.ideal_point[0]) / np.where(abs_ideal_point_k_1 > delta_value,
                                                                                  abs_ideal_point_k_1, delta_value))
-        rnk = np.max(np.abs(self.nadir_point[1] - self.nadir_point[0]) / np.where(abs_nadir_point_k_1 > delta_value,
+        rnk = np.max(np.abs(self.nadir_point[-1] - self.nadir_point[0]) / np.where(abs_nadir_point_k_1 > delta_value,
                                                                                  abs_nadir_point_k_1, delta_value))
         # print("[rz, rnk]: [%f, %f]", rz, rnk)
+
         logger.info(f"rz = {rz}, rnk = {rnk}")
         return max(rz, rnk)
 
@@ -237,15 +263,16 @@ class MoeadPPS(object):
             return
 
     def pull_sub_problem(self, P, offspring, g_old, g_off, cv_old, cv_off):
-        g_can_replace = (g_old > g_off)
+        g_can_replace = (g_old >= g_off)
         cv_can_replace_1 = np.logical_and((cv_old <= self.epsilon_k), cv_off <= self.epsilon_k)
         cv_can_replace_2 = (cv_old == cv_off)
         cv_can_replace_3 = (cv_off < cv_old)
-        replace_index1 = np.where(np.logical_and(g_can_replace, np.logical_or(np.logical_or(cv_can_replace_1,
-                                                                                           cv_can_replace_2),
-                                                                                              cv_can_replace_3)))
+        # replace_index1 = np.where(np.logical_and(g_can_replace, np.logical_or(np.logical_or(cv_can_replace_1,
+        #                                                                                    cv_can_replace_2),
+        #                                                                                       cv_can_replace_3)))
+        replace_index1 = np.where(g_can_replace & (cv_can_replace_1 | cv_can_replace_2) | cv_can_replace_3)
         replace_index2 = replace_index1[0]
-        logger.debug(f"cv_can_replace_1: {cv_can_replace_1}")
+        # logger.debug(f"cv_can_replace_1: {cv_can_replace_1}")
         replace_index = np.random.permutation(replace_index2)[0:self.nr]
         # logger.debug(f"cv_can_replace_1: {cv_can_replace_1}")
         # logging.debug(f"replace index :{replace_index}")
@@ -296,7 +323,7 @@ class MoeadPPS(object):
         pop_arch_mat = self.transform_pop_to_matrix(temp_pop_arch)
         constrains_mat = pop_arch_mat[:, self.n_var+self.n_objs:self.n_var+self.n_objs+self.n_cv]
         feasible_index = np.where(np.all(constrains_mat<=0, axis=1))[0]
-        logger.debug(f"feasible_index.shape[0]: {feasible_index.shape[0]}")
+        # logger.debug(f"feasible_index.shape[0]: {feasible_index.shape[0]}")
         if feasible_index.shape[0] > 0:
             arch_pop = pop_arch_mat[feasible_index]
             non_fronts_rank = self.non_dominate_sort.do(arch_pop[:, self.n_var:self.n_var+self.n_objs])
@@ -340,7 +367,7 @@ class MoeadPPS(object):
         if len(self.arch) != 0:
             plot.add(self.problem.evaluate(np.array(self.arch), return_as_dictionary=True)['F'], s=30, facecolors='blue',
                      edgecolors='blue')
-        plot.add(self.problem_pf, s=10, facecolors="none", edgecolors="green")
+        plot.add(self.problem_pf, s=30, facecolors="none", edgecolors="green")
         plot.show()
 
     def evolution(self):
@@ -348,6 +375,8 @@ class MoeadPPS(object):
         self.evaluate()
         self.Z = np.min(self.get_fitness_matrix(), axis=0)
         for gen in range(self.max_gen):
+            if gen == 100:
+                print("debug")
             print("gen: ", gen)
             # self.problem.evaluate(np.array(self.pop))
             self.evaluate()
@@ -355,8 +384,9 @@ class MoeadPPS(object):
             overall_cv_vector = self.calculate_overall_cv(pop_cvs)
             population = self.get_pop_all_message_matrix(overall_cv_vector)
             rf = np.sum(overall_cv_vector <= 1e-6) / self.N
-            self.update_ideal_point()
-            self.update_nadir_point()
+            logger.debug(f"rf is {rf}")
+            self.update_ideal_point(gen)
+            self.update_nadir_point(gen)
 
             if gen >= self.last_gen:
                 max_change = self.calc_max_change()
@@ -370,12 +400,12 @@ class MoeadPPS(object):
                     self.search_stage = -1
                     self.epsilon_0 = np.max(population[:, -1])
                     self.epsilon_k = self.epsilon_0
-                    logger.debug(f"use push stage, gen is {gen}")
                     logger.debug(f"max change: {max_change}")
 
                 if self.search_stage == -1:
                     self.epsilon_k = self.update_epsilon(self.epsilon_k, self.epsilon_0, rf, gen)
                     logger.info(f"use pull stage, gen is {gen}")
+                    logger.debug(f"epsilon_k is {self.epsilon_k}")
             else:
                 self.epsilon_k = 0
 
@@ -411,26 +441,34 @@ class MoeadPPS(object):
                     self.pull_sub_problem(P, offspring, g_old, g_off, cv_old, cv_off)
 
             self.non_dominate_select()
-            self.draw(gen)
-            if gen == 400 and saveData:
-                print("save")
-                save_data("data_ctp1", self.pop, self.arch)
-
+            # self.draw(gen)
+            # if gen % 400 and saveData:
+            #     print("save")
+            #     save_data(f"data_LIORCMOP1_{gen}", self.pop, self.arch)
+        self.draw(self.max_gen)
+        # save_data(f"Cdtlz_{self.max_gen}", self.pop, self.arch)
         return self.arch, self.pop
 
 
+def save_data(file_name, pop, arch):
+    path = sys.path[0]
+    path = os.path.join(path, "data")
+    path = path + "/" + file_name + ".npz"
+    np.savez(path, pop=pop, arch=arch)
 
 if __name__ == '__main__':
-    # my_problem = MyProblem()
-    # my_problem = get_problem("ctp1")
-    my_problem = LIRCMOP1()
+    # my_problem = C1_DTLZ1()
+    my_problem = get_problem("ctp1")
+    # my_problem = LIRCMOP1()
     # arc_mat = np.zeros((len(arch), my_problem.n_var))
     # arc_mat = np.zeros((10, 10))
     # save_data("test", arc_mat, arc_mat)
-    moeadpps_object = MoeadPPS(300, my_problem, 300000)
+    moeadpps_object = MoeadPPS(91, my_problem, 30000)
     # print("nei", moeadpps_object.w_lambda_vector.shape)
 
     arch, pop = moeadpps_object.evolution()
+    arch_np = np.array(arch)
+
     # arc_mat = np.zeros((len(arch), my_problem.n_var))
     # pop_mat = np.zeros((len(pop), my_problem.n_var))
     # for i in range(len(arch)):
