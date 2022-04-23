@@ -1,4 +1,2 @@
 /*.DS_Store
-/*.iws
-/*workspace.xml
-/*task.xml
+.idea/
