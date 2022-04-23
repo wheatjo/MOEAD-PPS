@@ -1,6 +1,9 @@
+
 from pymoo.algorithms.moo.moead import MOEAD, ParallelMOEAD
 from pymoo.factory import get_problem, get_visualization, get_reference_directions
 from pymoo.optimize import minimize
+from pymoo.util.display import Display
+from pymoo.visualization.scatter import Scatter
 
 problem = get_problem("dtlz2")
 
@@ -16,6 +19,8 @@ res = minimize(problem,
                algorithm,
                ('n_gen', 200),
                seed=1,
-               verbose=False)
+               save_history=True,
+               verbose=True)
 
-get_visualization("scatter").add(res.F).show()
+# get_visualization("scatter").add(res.F).show()
+Scatter(legend=True).add(problem.pareto_front(), label="Pareto-front").add(res.F, label="Result").show()

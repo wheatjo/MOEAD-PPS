@@ -29,8 +29,8 @@ class MyProblem(ElementwiseProblem):
         out["G"] = [g1, g2]
 
 
-problem = MyProblem()
-# problem = get_problem("zdt1")
+# problem = MyProblem()
+problem = get_problem("zdt1")
 # print(problem.n_obj)
 # x = np.random.random(2)
 #
@@ -44,7 +44,7 @@ def create_pop(n=100, var=2):
     pop = np.random.random(((n, var)))
     return pop
 
-x = create_pop(100 ,2)
+x = create_pop(100 ,30)
 # out = {"F":None, "G":None}
 # # can use pymoo benchmark to test algorithm
 g = problem.evaluate(x,return_as_dictionary=True)

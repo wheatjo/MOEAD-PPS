@@ -1,11 +1,12 @@
-import numpy as np
 
-a = np.array([np.repeat(1,10)])
-b = np.array([np.repeat(2,10)])
-c = np.array([np.repeat(3,10)])
+from pymoo.visualization.scatter import Scatter
+from pymoo.factory import get_problem, get_reference_directions
 
-d = np.hstack((a.T,b.T,c.T))
+F = get_problem("zdt3").pareto_front()
+fc = get_problem("ctp1").pareto_front(use_cache=False, flatten=False)
 
-print(d)
+plot = Scatter()
 
-np.where()
+plot.add(F, s=5, facecolors='red', edgecolors='red')
+plot.add(fc, s=30, facecolors='red', edgecolors='blue')
+plot.show()
