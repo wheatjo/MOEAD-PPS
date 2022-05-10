@@ -1,9 +1,11 @@
-from deap import base
-from deap import tools
-from deap import creator
-import numpy as np
-from functools import partial
-from pymoo.factory import get_problem
-from pymoo.factory import get_mutation
-from pymoo.interface import mutation
+from pymoo.util.termination.default import MultiObjectiveDefaultTermination
 
+termination = MultiObjectiveDefaultTermination(
+    x_tol=1e-8,
+    cv_tol=1e-6,
+    f_tol=0.0025,
+    nth_gen=5,
+    n_last=30,
+    n_max_gen=1000,
+    n_max_evals=100000
+)
